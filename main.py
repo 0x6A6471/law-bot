@@ -7,8 +7,16 @@ import urllib.parse
 from email.header import decode_header
 from typing import Optional
 
-from bs4 import BeautifulSoup, NavigableString, Tag
+import requests
+from bs4 import BeautifulSoup, Tag
 from dotenv import load_dotenv
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support.ui import WebDriverWait
+from webdriver_manager.chrome import ChromeDriverManager
 
 load_dotenv()
 
@@ -44,12 +52,91 @@ def parse_email_content(content: str) -> Optional[str]:
             print(f"Unexpected href type: {type(href)}")
         else:
             print("href attribute is None")
-    elif download_link and isinstance(download_link, NavigableString):
-        print(f"Found NavigableString instead of Tag: {download_link}")
-        return None
-
-    print("No download link found.")
+    else:
+        print("No download link found.")
     return None
+
+
+def download_files_from_js_page(url: str):
+    # Set up headless browser options
+    chrome_options = Options()
+    chrome_options.add_argument("--headless")  # Run in headless mode
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+
+    # Start the browser using webdriver-manager for automatic driver installation
+    driver = webdriver.Chrome(
+        service=Service(ChromeDriverManager().install()), options=chrome_options
+    )
+
+    try:
+        print(f"Visiting {url}...")
+        driver.get(url)
+
+        # Wait for the download links to be clickable (use explicit wait)
+        WebDriverWait(driver, 10).until(
+            EC.element_to_be_clickable((By.PARTIAL_LINK_TEXT, "DOWNLOAD"))
+        )
+
+        # Find the download anchor link
+        download_links = driver.find_elements(By.PARTIAL_LINK_TEXT, "DOWNLOAD")
+        print(f"Found {len(download_links)} download links.")
+
+        # Use XPath to locate the nearest preceding <p> tag that contains the file name
+        # In XPath, "preceding" is used to find an element that appears before the anchor
+        for link in download_links:
+            try:
+                file_name_element = link.find_element(By.XPATH, "./preceding::p[1]")
+                file_name = file_name_element.text  # Extract the actual file name
+
+                print(f"Found file name: {file_name}")
+
+                # Get the download URL from the anchor tag
+                download_url = link.get_attribute("href")
+
+                if download_url:
+                    print(f"Downloading from: {download_url}")
+                    # Use the extracted file name when saving the file
+                    download_file(download_url, file_name)
+            except Exception as e:
+                print(f"An error occurred while processing download links: {e}")
+
+    except Exception as e:
+        print(f"An error occurred while downloading files: {e}")
+    finally:
+        driver.quit()
+
+
+# TODO: throw  in cloud solution
+def download_file(url, file_name):
+    try:
+        response = requests.get(url, stream=True)
+
+        # Check if the response was successful
+        if response.status_code == 200:
+            # Check the Content-Type to ensure it's a ZIP file
+            if "application/zip" in response.headers.get("Content-Type", ""):
+                with open(file_name, "wb") as file:
+                    for chunk in response.iter_content(
+                        chunk_size=8192
+                    ):  # Download in chunks
+                        file.write(chunk)
+                print(f"File saved as: {file_name}")
+            else:
+                print(
+                    f"Unexpected content type: {response.headers.get('Content-Type')}"
+                )
+                print("The file may not be a ZIP file.")
+        else:
+            print(
+                f"Failed to download file from {url}. Status code: {response.status_code}"
+            )
+            print(
+                "Response content:", response.text
+            )  # Log response content for debugging
+
+    except Exception as e:
+        print(f"An error occurred during file download: {e}")
 
 
 def monitor_email():
@@ -91,7 +178,11 @@ def monitor_email():
                                     html_content = part.get_payload(
                                         decode=True
                                     ).decode()
-                                    parse_email_content(html_content)
+                                    link = parse_email_content(html_content)
+                                    if link:
+                                        download_files_from_js_page(link)
+                                    else:
+                                        print("No download link found in the email.")
                                     break
 
                 last_checked_email_id = latest_email_id
@@ -115,5 +206,4 @@ def monitor_email():
 
 
 if __name__ == "__main__":
-    print("Email Monitor and Parser for Download Links")
     monitor_email()
