@@ -35,14 +35,13 @@ def parse_email_content(content: str) -> Optional[str]:
     download_link = soup.find("a", href=DOWNLOAD_LINK_PATTERN)
 
     if not download_link:
-        # If not found, try looking for any link with text containing 'download'
+        # if not found look for any link with 'download'
         download_link = soup.find("a", string=re.compile(r"download", re.I))
 
     if download_link and isinstance(download_link, Tag):
         href = download_link.get("href")
         if href:
             if isinstance(href, list):
-                # If href is a list, join its elements
                 href = " ".join(href)
             if isinstance(href, str):
                 cleaned_url = href.replace("=\n", "").replace("=3D", "=")
@@ -58,13 +57,11 @@ def parse_email_content(content: str) -> Optional[str]:
 
 
 def download_files_from_js_page(url: str):
-    # Set up headless browser options
     chrome_options = Options()
-    chrome_options.add_argument("--headless")  # Run in headless mode
+    chrome_options.add_argument("--headless")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
 
-    # Start the browser using webdriver-manager for automatic driver installation
     driver = webdriver.Chrome(
         service=Service(ChromeDriverManager().install()), options=chrome_options
     )
@@ -73,30 +70,24 @@ def download_files_from_js_page(url: str):
         print(f"Visiting {url}...")
         driver.get(url)
 
-        # Wait for the download links to be clickable (use explicit wait)
         WebDriverWait(driver, 10).until(
             EC.element_to_be_clickable((By.PARTIAL_LINK_TEXT, "DOWNLOAD"))
         )
 
-        # Find the download anchor link
         download_links = driver.find_elements(By.PARTIAL_LINK_TEXT, "DOWNLOAD")
         print(f"Found {len(download_links)} download links.")
 
-        # Use XPath to locate the nearest preceding <p> tag that contains the file name
-        # In XPath, "preceding" is used to find an element that appears before the anchor
         for link in download_links:
             try:
                 file_name_element = link.find_element(By.XPATH, "./preceding::p[1]")
-                file_name = file_name_element.text  # Extract the actual file name
+                file_name = file_name_element.text
 
                 print(f"Found file name: {file_name}")
 
-                # Get the download URL from the anchor tag
                 download_url = link.get_attribute("href")
 
                 if download_url:
                     print(f"Downloading from: {download_url}")
-                    # Use the extracted file name when saving the file
                     download_file(download_url, file_name)
             except Exception as e:
                 print(f"An error occurred while processing download links: {e}")
@@ -112,14 +103,10 @@ def download_file(url, file_name):
     try:
         response = requests.get(url, stream=True)
 
-        # Check if the response was successful
         if response.status_code == 200:
-            # Check the Content-Type to ensure it's a ZIP file
             if "application/zip" in response.headers.get("Content-Type", ""):
                 with open(file_name, "wb") as file:
-                    for chunk in response.iter_content(
-                        chunk_size=8192
-                    ):  # Download in chunks
+                    for chunk in response.iter_content(chunk_size=8192):
                         file.write(chunk)
                 print(f"File saved as: {file_name}")
             else:
@@ -131,9 +118,7 @@ def download_file(url, file_name):
             print(
                 f"Failed to download file from {url}. Status code: {response.status_code}"
             )
-            print(
-                "Response content:", response.text
-            )  # Log response content for debugging
+            print("Response content:", response.text)
 
     except Exception as e:
         print(f"An error occurred during file download: {e}")
