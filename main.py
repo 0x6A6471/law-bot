@@ -29,7 +29,7 @@ CHECK_INTERVAL = 10
 DOWNLOAD_LINK_PATTERN = os.getenv("DOWNLOAD_LINK_PATTERN", "")
 
 
-def parse_email_content(content: str) -> Optional[str]:
+def parse_email(content: str) -> Optional[str]:
     soup = BeautifulSoup(content, "html.parser")
 
     download_link = soup.find("a", href=DOWNLOAD_LINK_PATTERN)
@@ -56,7 +56,7 @@ def parse_email_content(content: str) -> Optional[str]:
     return None
 
 
-def download_files_from_js_page(url: str):
+def parse_webpage(url: str):
     chrome_options = Options()
     chrome_options.add_argument("--headless")
     chrome_options.add_argument("--no-sandbox")
@@ -163,9 +163,9 @@ def monitor_email():
                                     html_content = part.get_payload(
                                         decode=True
                                     ).decode()
-                                    link = parse_email_content(html_content)
+                                    link = parse_email(html_content)
                                     if link:
-                                        download_files_from_js_page(link)
+                                        parse_webpage(link)
                                     else:
                                         print("No download link found in the email.")
                                     break
